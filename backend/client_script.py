@@ -1,25 +1,53 @@
 import json
-import os
-import sys
 import time
+import base64
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.request
-import urllib.error
-import urllib.parse
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
 
-# Configuration
 MASTER_URL = "http://master:8000"
-CHUNK_SIZE = 1024 * 1024  # 1MB
+CHUNK_SIZE = 1024 * 1024  
+ENCRYPTION_KEY = None  
 
-def upload_file(filename, content):
-    """Upload a file to the GFS"""
-    print(f"[CLIENT] Starting upload: {filename}")
+def generate_encryption_key(password="default_gfs_key"):
+    """Generate encryption key from password"""
+    kdf = PBKDF2(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b'gfs_salt_2024',  
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return Fernet(key)
+
+def encrypt_data(data, cipher):
+    if isinstance(data, str):
+        data = data.encode()
+    return cipher.encrypt(data)
+
+def decrypt_data(encrypted_data, cipher):
+    return cipher.decrypt(encrypted_data)
+
+def upload_file(filename, content, encrypt=True):
+    print(f"[CLIENT] Starting upload: {filename} (Encryption: {encrypt})")
+
+    cipher = generate_encryption_key() if encrypt else None
     
-    # Step 1: Request chunk allocation from Master
+    if isinstance(content, str):
+        content_bytes = content.encode()
+    else:
+        content_bytes = content
+    
+    if encrypt:
+        print(f"[CLIENT] Encrypting file...")
+        content_bytes = encrypt_data(content_bytes, cipher)
+
     try:
         data = json.dumps({
             "filename": filename,
-            "filesize": len(content)
+            "filesize": len(content_bytes)
         }).encode()
         
         req = urllib.request.Request(
@@ -37,22 +65,20 @@ def upload_file(filename, content):
         print(f"[CLIENT] Failed to get allocation: {e}")
         return False
     
-    # Step 2: Upload chunks to assigned servers
     for alloc in allocation["allocations"]:
         chunk_id = alloc["chunk_id"]
         servers = alloc["servers"]
         index = alloc["index"]
-        
-        # Extract chunk data
+
         start = index * CHUNK_SIZE
-        end = min(start + CHUNK_SIZE, len(content))
-        chunk_data = content[start:end]
+        end = min(start + CHUNK_SIZE, len(content_bytes))
+        chunk_data = content_bytes[start:end]
+
+        is_binary = not isinstance(content, str) or encrypt
         
-        # Upload to each replica server
         success = False
         for server_id in servers:
             try:
-                # Determine server port
                 port_map = {
                     "chunk_server_1": 9001,
                     "chunk_server_2": 9002,
@@ -60,13 +86,17 @@ def upload_file(filename, content):
                 }
                 port = port_map.get(server_id, 9001)
                 
-                # Prepare upload data
-                upload_data = f"chunk_id={chunk_id}&data={urllib.parse.quote(chunk_data)}".encode()
+                upload_payload = {
+                    "chunk_id": chunk_id,
+                    "data": base64.b64encode(chunk_data).decode(),
+                    "is_binary": is_binary,
+                    "filename": filename
+                }
                 
                 req = urllib.request.Request(
                     f"http://{server_id}:{port}/upload",
-                    data=upload_data,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                    data=json.dumps(upload_payload).encode(),
+                    headers={"Content-Type": "application/json"}
                 )
                 
                 with urllib.request.urlopen(req, timeout=10) as response:
@@ -77,7 +107,6 @@ def upload_file(filename, content):
             except Exception as e:
                 print(f"[CLIENT] Failed to upload {chunk_id} to {server_id}: {e}")
         
-        # Register chunk with Master
         if success:
             try:
                 data = json.dumps({
@@ -99,7 +128,7 @@ def upload_file(filename, content):
             except Exception as e:
                 print(f"[CLIENT] Failed to register {chunk_id}: {e}")
         
-        time.sleep(0.5)  # Simulate upload time
+        time.sleep(0.5)  
     
     print(f"[CLIENT] Upload completed: {filename}")
     return True
@@ -131,20 +160,27 @@ class ClientHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(body)
             filename = data.get("filename", "test_file.txt")
-            content = data.get("content", "Sample file content for testing GFS upload.")
+            content = data.get("content", "")
+            content_b64 = data.get("content_base64", None)
+            encrypt = data.get("encrypt", True)
             
-            # Perform upload
-            success = upload_file(filename, content)
+            if content_b64:
+                content = base64.b64decode(content_b64)
+            
+            success = upload_file(filename, content, encrypt)
             
             self._set_headers()
             self.wfile.write(json.dumps({
                 "success": success,
                 "filename": filename,
-                "size": len(content)
+                "size": len(content) if isinstance(content, (bytes, str)) else 0,
+                "encrypted": encrypt
             }).encode())
         
         except Exception as e:
             print(f"[CLIENT] Error: {e}")
+            import traceback
+            traceback.print_exc()
             self._set_headers(500)
             self.wfile.write(json.dumps({"error": str(e)}).encode())
     
@@ -153,9 +189,9 @@ class ClientHandler(BaseHTTPRequestHandler):
         pass
 
 def main():
-    # Start HTTP server for web UI requests
     server = HTTPServer(('0.0.0.0', 8001), ClientHandler)
     print("[CLIENT] Client service started on port 8001")
+    print("[CLIENT] Encryption enabled for all uploads")
     server.serve_forever()
 
 if __name__ == "__main__":

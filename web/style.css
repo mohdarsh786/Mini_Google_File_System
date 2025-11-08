@@ -18,8 +18,7 @@ body {
     display: block;
 }
 
-/* Login Screen */
-.login-container {
+.auth-container {
     max-width: 400px;
     margin: 100px auto;
     background: white;
@@ -28,14 +27,14 @@ body {
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
-.login-container h1 {
+.auth-container h1 {
     text-align: center;
     color: #667eea;
     font-size: 2.5em;
     margin-bottom: 10px;
 }
 
-.login-container h2 {
+.auth-container h2 {
     text-align: center;
     color: #666;
     font-size: 1.2em;
@@ -43,13 +42,44 @@ body {
     font-weight: normal;
 }
 
-.login-container form {
+.auth-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    color: #666;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.3s;
+}
+
+.auth-tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    font-weight: 600;
+}
+
+.auth-form {
+    display: none;
+}
+
+.auth-form.active {
+    display: block;
+}
+
+.auth-container form {
     display: flex;
     flex-direction: column;
     gap: 15px;
 }
 
-.login-container input {
+.auth-container input {
     padding: 12px;
     border: 2px solid #e0e0e0;
     border-radius: 6px;
@@ -57,12 +87,12 @@ body {
     transition: border-color 0.3s;
 }
 
-.login-container input:focus {
+.auth-container input:focus {
     outline: none;
     border-color: #667eea;
 }
 
-.login-container button {
+.auth-container button {
     padding: 12px;
     background: #667eea;
     color: white;
@@ -74,15 +104,22 @@ body {
     transition: background 0.3s;
 }
 
-.login-container button:hover {
+.auth-container button:hover {
     background: #5568d3;
+}
+
+.error, .success {
+    text-align: center;
+    margin-top: 10px;
+    font-size: 14px;
 }
 
 .error {
     color: #e74c3c;
-    text-align: center;
-    margin-top: 10px;
-    font-size: 14px;
+}
+
+.success {
+    color: #2ecc71;
 }
 
 .credentials-hint {
@@ -97,7 +134,6 @@ body {
     margin: 5px 0;
 }
 
-/* Navbar */
 .navbar {
     background: white;
     padding: 20px 40px;
@@ -139,7 +175,6 @@ body {
     font-weight: 500;
 }
 
-/* Container */
 .container {
     max-width: 1400px;
     margin: 30px auto;
@@ -154,7 +189,6 @@ body {
     display: block;
 }
 
-/* Section */
 .section {
     background: white;
     padding: 30px;
@@ -170,7 +204,6 @@ body {
     border-bottom: 2px solid #f0f0f0;
 }
 
-/* Stats Grid */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -196,7 +229,117 @@ body {
     font-weight: 700;
 }
 
-/* Servers List */
+.upload-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.file-input, .file-textarea {
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.file-textarea {
+    min-height: 150px;
+    resize: vertical;
+}
+
+.file-input:focus, .file-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.drag-drop-zone {
+    border: 3px dashed #667eea;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    background: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.drag-drop-zone.dragover {
+    background: #e7eaf6;
+    border-color: #5568d3;
+}
+
+.drag-drop-zone p {
+    color: #667eea;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.drag-drop-zone small {
+    color: #666;
+}
+
+.encryption-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.encryption-toggle input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.encryption-toggle label {
+    cursor: pointer;
+    user-select: none;
+}
+
+.btn-primary, .btn-secondary, .btn-danger {
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.3s;
+}
+
+.btn-primary {
+    background: #667eea;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5568d3;
+}
+
+.btn-secondary {
+    background: #95a5a6;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #7f8c8d;
+}
+
+.btn-danger {
+    background: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
+}
+
+.btn-danger:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
 .servers-list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -260,89 +403,6 @@ body {
     margin-top: 15px;
 }
 
-.btn-danger {
-    background: #e74c3c;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background 0.3s;
-}
-
-.btn-danger:hover {
-    background: #c0392b;
-}
-
-.btn-danger:disabled {
-    background: #bdc3c7;
-    cursor: not-allowed;
-}
-
-/* Buttons */
-.btn-primary {
-    background: #667eea;
-    color: white;
-    border: none;
-    padding: 12px 24px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    transition: background 0.3s;
-}
-
-.btn-primary:hover {
-    background: #5568d3;
-}
-
-.btn-secondary {
-    background: #95a5a6;
-    color: white;
-    border: none;
-    padding: 12px 24px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    transition: background 0.3s;
-}
-
-.btn-secondary:hover {
-    background: #7f8c8d;
-}
-
-/* User Management */
-.user-actions {
-    margin-bottom: 20px;
-}
-
-.users-table {
-    overflow-x: auto;
-}
-
-.user-row {
-    display: grid;
-    grid-template-columns: 2fr 1fr 2fr 1fr;
-    gap: 20px;
-    padding: 15px;
-    border-bottom: 1px solid #e0e0e0;
-    align-items: center;
-}
-
-.user-row:first-child {
-    font-weight: 600;
-    background: #f8f9fa;
-    border-radius: 6px 6px 0 0;
-}
-
-.user-row button {
-    padding: 6px 12px;
-    font-size: 12px;
-}
-
-/* Files List */
 .files-list {
     display: flex;
     flex-direction: column;
@@ -376,37 +436,8 @@ body {
     font-size: 12px;
 }
 
-/* Upload Section */
-.upload-section {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.file-input, .file-textarea {
-    padding: 12px;
-    border: 2px solid #e0e0e0;
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: inherit;
-}
-
-.file-textarea {
-    min-height: 150px;
-    resize: vertical;
-}
-
-.file-input:focus, .file-textarea:focus {
-    outline: none;
-    border-color: #667eea;
-}
-
 .progress-container {
     margin-top: 15px;
-}
-
-.progress-item {
-    margin-bottom: 10px;
 }
 
 .progress-label {
@@ -428,7 +459,6 @@ body {
     transition: width 0.3s;
 }
 
-/* Modal */
 .modal {
     display: none;
     position: fixed;
@@ -495,7 +525,34 @@ body {
     flex: 1;
 }
 
-/* Empty State */
+.user-actions {
+    margin-bottom: 20px;
+}
+
+.users-table {
+    overflow-x: auto;
+}
+
+.user-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 2fr 1fr;
+    gap: 20px;
+    padding: 15px;
+    border-bottom: 1px solid #e0e0e0;
+    align-items: center;
+}
+
+.user-row:first-child {
+    font-weight: 600;
+    background: #f8f9fa;
+    border-radius: 6px 6px 0 0;
+}
+
+.user-row button {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
 .empty-state {
     text-align: center;
     padding: 40px;
@@ -506,7 +563,6 @@ body {
     font-size: 16px;
 }
 
-/* Animations */
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
@@ -518,4 +574,39 @@ body {
 
 .loading {
     animation: pulse 1.5s ease-in-out infinite;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 0 20px;
+    }
+
+    .navbar {
+        padding: 15px 20px;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .nav-left, .nav-right {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .servers-list {
+        grid-template-columns: 1fr;
+    }
+
+    .user-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .auth-container {
+        margin: 50px 20px;
+        padding: 30px;
+    }
 }

@@ -1,62 +1,76 @@
 // Configuration
 const MASTER_URL = 'http://localhost:8000';
 const CLIENT_URL = 'http://localhost:8001';
-const REFRESH_INTERVAL = 3000; // 3 seconds
+const REFRESH_INTERVAL = 3000;
 
-// Global state
 let currentUser = null;
 let currentRole = null;
+let currentToken = null;
 let refreshTimer = null;
 
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
 });
 
 function initializeApp() {
-    // Check if user is already logged in
-    const savedUser = localStorage.getItem('gfs_user');
-    const savedRole = localStorage.getItem('gfs_role');
+    const savedToken = sessionStorage.getItem('gfs_token');
+    const savedUser = sessionStorage.getItem('gfs_user');
+    const savedRole = sessionStorage.getItem('gfs_role');
     
-    if (savedUser && savedRole) {
+    if (savedToken && savedUser && savedRole) {
+        currentToken = savedToken;
         currentUser = savedUser;
         currentRole = savedRole;
         showDashboard();
     } else {
-        showLogin();
+        showAuth();
     }
     
-    // Setup event listeners
     setupEventListeners();
 }
 
 function setupEventListeners() {
-    // Login form
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+        tab.addEventListener('click', () => switchAuthTab(tab.dataset.tab));
+    });
     
-    // Logout button
+    document.getElementById('loginFormSubmit').addEventListener('submit', handleLogin);
+    document.getElementById('signupFormSubmit').addEventListener('submit', handleSignup);
     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
     
-    // User management
+    const dropZone = document.getElementById('dragDropZone');
+    const fileInput = document.getElementById('fileInput');
+    
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', handleFileDrop);
+    
+    fileInput.addEventListener('change', handleFileSelect);
+    
+    // Upload
+    document.getElementById('uploadBtn').addEventListener('click', handleManualUpload);
+    
+    // Modals
     const addUserBtn = document.getElementById('addUserBtn');
     if (addUserBtn) {
         addUserBtn.addEventListener('click', () => showModal('addUserModal'));
     }
     
-    const cancelBtn = document.getElementById('cancelAddUser');
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => hideModal('addUserModal'));
-    }
-    
+    document.getElementById('cancelAddUser').addEventListener('click', () => hideModal('addUserModal'));
     document.getElementById('addUserForm').addEventListener('submit', handleAddUser);
     
-    // File upload
-    const uploadBtn = document.getElementById('uploadBtn');
-    if (uploadBtn) {
-        uploadBtn.addEventListener('click', handleFileUpload);
-    }
-    
-    // Modal close
     document.querySelectorAll('.close').forEach(el => {
         el.addEventListener('click', (e) => {
             const modal = e.target.closest('.modal');
@@ -65,13 +79,30 @@ function setupEventListeners() {
     });
 }
 
-// Authentication
+// ============ Authentication ============
+
+function switchAuthTab(tab) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+    
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById(`${tab}Form`).classList.add('active');
+    
+    // Clear messages
+    document.getElementById('loginError').textContent = '';
+    document.getElementById('signupError').textContent = '';
+    document.getElementById('signupSuccess').textContent = '';
+}
+
 async function handleLogin(e) {
     e.preventDefault();
+    console.log('Login attempt started'); 
     
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
+    const username = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
     const errorEl = document.getElementById('loginError');
+    
+    console.log('Username:', username);
     
     try {
         const response = await fetch(`${MASTER_URL}/login`, {
@@ -85,9 +116,11 @@ async function handleLogin(e) {
         if (data.success) {
             currentUser = username;
             currentRole = data.role;
+            currentToken = data.token;
             
-            localStorage.setItem('gfs_user', username);
-            localStorage.setItem('gfs_role', data.role);
+            sessionStorage.setItem('gfs_token', data.token);
+            sessionStorage.setItem('gfs_user', username);
+            sessionStorage.setItem('gfs_role', data.role);
             
             showDashboard();
         } else {
@@ -99,39 +132,90 @@ async function handleLogin(e) {
     }
 }
 
-function handleLogout() {
+async function handleSignup(e) {
+    e.preventDefault();
+    
+    const username = document.getElementById('signupUsername').value;
+    const password = document.getElementById('signupPassword').value;
+    const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
+    const errorEl = document.getElementById('signupError');
+    const successEl = document.getElementById('signupSuccess');
+    
+    errorEl.textContent = '';
+    successEl.textContent = '';
+    
+    if (password !== passwordConfirm) {
+        errorEl.textContent = 'Passwords do not match';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${MASTER_URL}/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            successEl.textContent = 'Account created! You can now login.';
+            document.getElementById('signupFormSubmit').reset();
+            setTimeout(() => switchAuthTab('login'), 2000);
+        } else {
+            errorEl.textContent = data.error || 'Signup failed';
+        }
+    } catch (error) {
+        errorEl.textContent = 'Connection error. Please ensure the system is running.';
+        console.error('Signup error:', error);
+    }
+}
+
+async function handleLogout() {
+    try {
+        await fetch(`${MASTER_URL}/logout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: currentToken })
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+    
     currentUser = null;
     currentRole = null;
-    localStorage.removeItem('gfs_user');
-    localStorage.removeItem('gfs_role');
+    currentToken = null;
+    sessionStorage.clear();
     
     if (refreshTimer) {
         clearInterval(refreshTimer);
         refreshTimer = null;
     }
     
-    showLogin();
+    showAuth();
 }
 
-// Screen management
-function showLogin() {
-    document.getElementById('loginScreen').classList.add('active');
+// ============ Screen Management ============
+
+function showAuth() {
+    document.getElementById('authScreen').classList.add('active');
     document.getElementById('dashboardScreen').classList.remove('active');
-    document.getElementById('loginForm').reset();
+    document.getElementById('loginFormSubmit').reset();
+    document.getElementById('signupFormSubmit').reset();
     document.getElementById('loginError').textContent = '';
+    document.getElementById('signupError').textContent = '';
+    document.getElementById('signupSuccess').textContent = '';
 }
 
 function showDashboard() {
-    document.getElementById('loginScreen').classList.remove('active');
+    document.getElementById('authScreen').classList.remove('active');
     document.getElementById('dashboardScreen').classList.add('active');
     
     document.getElementById('userName').textContent = currentUser;
     document.getElementById('userRole').textContent = currentRole;
     
     // Show appropriate dashboard
-    document.querySelectorAll('.dashboard-content').forEach(el => {
-        el.classList.remove('active');
-    });
+    document.querySelectorAll('.dashboard-content').forEach(el => el.classList.remove('active'));
     
     if (currentRole === 'admin') {
         document.getElementById('adminDashboard').classList.add('active');
@@ -159,7 +243,8 @@ function refreshDashboard() {
     }
 }
 
-// Admin Dashboard
+// ============ Admin Dashboard ============
+
 async function loadAdminDashboard() {
     try {
         const [status, users] = await Promise.all([
@@ -167,7 +252,7 @@ async function loadAdminDashboard() {
             fetch(`${MASTER_URL}/users`).then(r => r.json())
         ]);
         
-        updateAdminStats(status);
+        updateAdminStats(status, users);
         updateServersList(status.servers, 'serversList', true);
         updateUsersList(users.users);
         updateFilesList(status.files, 'filesList');
@@ -176,14 +261,14 @@ async function loadAdminDashboard() {
     }
 }
 
-function updateAdminStats(status) {
+function updateAdminStats(status, users) {
     const activeCount = Object.values(status.servers).filter(s => s.status === 'active').length;
     const fileCount = Object.keys(status.files).length;
     
     document.getElementById('activeServers').textContent = `${activeCount}/${Object.keys(status.servers).length}`;
     document.getElementById('totalFiles').textContent = fileCount;
     document.getElementById('faultTolerance').textContent = `${status.fault_tolerance}%`;
-    document.getElementById('totalUsers').textContent = document.querySelectorAll('.user-row').length - 1;
+    document.getElementById('totalUsers').textContent = users.length;
 }
 
 function updateUsersList(users) {
@@ -235,7 +320,8 @@ async function promoteUser(username) {
     }
 }
 
-// Manager Dashboard
+// ============ Manager Dashboard ============
+
 async function loadManagerDashboard() {
     try {
         const status = await fetch(`${MASTER_URL}/status`).then(r => r.json());
@@ -257,7 +343,8 @@ function updateManagerStats(status) {
     document.getElementById('managerFaultTolerance').textContent = `${status.fault_tolerance}%`;
 }
 
-// User Dashboard
+// ============ User Dashboard ============
+
 async function loadUserDashboard() {
     try {
         const status = await fetch(`${MASTER_URL}/status`).then(r => r.json());
@@ -279,12 +366,13 @@ function updateUserStats(status) {
     document.getElementById('userFaultTolerance').textContent = `${status.fault_tolerance}%`;
 }
 
-// Servers List
+// ============ Common UI Updates ============
+
 function updateServersList(servers, containerId, showActions) {
     const container = document.getElementById(containerId);
     
     if (!servers || Object.keys(servers).length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No servers available</p></div>';
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">No servers available</div>';
         return;
     }
     
@@ -297,13 +385,13 @@ function updateServersList(servers, containerId, showActions) {
         html += `
             <div class="server-card ${statusClass}">
                 <div class="server-header">
-                    <div class="server-name">${id}</div>
+                    <div style="font-weight: 600;">${id}</div>
                     <div class="server-status ${statusClass}">${info.status}</div>
                 </div>
-                <div class="server-info">Host: ${info.host}:${info.port}</div>
-                <div class="server-info">Last Heartbeat: ${lastHeartbeat}</div>
+                <div style="color: #666; font-size: 14px; margin-bottom: 10px;">Host: ${info.host}:${info.port}</div>
+                <div style="color: #666; font-size: 14px; margin-bottom: 10px;">Last Heartbeat: ${lastHeartbeat}</div>
                 ${showActions && (currentRole === 'admin' || currentRole === 'manager') ? `
-                    <div class="server-actions">
+                    <div style="margin-top: 15px;">
                         <button class="btn-danger" onclick="simulateFailure('${id}')" ${info.status === 'failed' ? 'disabled' : ''}>
                             Simulate Failure
                         </button>
@@ -341,12 +429,11 @@ async function simulateFailure(serverId) {
     }
 }
 
-// Files List
 function updateFilesList(files, containerId) {
     const container = document.getElementById(containerId);
     
     if (!files || Object.keys(files).length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No files uploaded yet</p></div>';
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">No files uploaded yet</div>';
         return;
     }
     
@@ -355,11 +442,11 @@ function updateFilesList(files, containerId) {
     Object.entries(files).forEach(([filename, info]) => {
         html += `
             <div class="file-card">
-                <div class="file-name">📄 ${filename}</div>
-                <div>Uploaded: ${new Date(info.upload_time).toLocaleString()}</div>
-                <div>Chunks: ${info.chunks.length}</div>
-                <div class="file-chunks">
-                    ${info.chunks.map(chunk => `<span class="chunk-badge">${chunk}</span>`).join('')}
+                <div style="font-weight: 600; margin-bottom: 10px;">📄 ${filename}</div>
+                <div style="color: #666; font-size: 14px;">Uploaded: ${new Date(info.upload_time).toLocaleString()}</div>
+                <div style="color: #666; font-size: 14px; margin-bottom: 10px;">Chunks: ${info.chunks.length}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                    ${info.chunks.map(chunk => `<span style="background: #667eea; color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px;">${chunk}</span>`).join('')}
                 </div>
             </div>
         `;
@@ -368,8 +455,27 @@ function updateFilesList(files, containerId) {
     container.innerHTML = html;
 }
 
-// File Upload
-async function handleFileUpload() {
+// ============ File Upload ============
+
+function handleFileDrop(e) {
+    e.preventDefault();
+    const dropZone = document.getElementById('dragDropZone');
+    dropZone.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        uploadFiles(files);
+    }
+}
+
+function handleFileSelect(e) {
+    const files = e.target.files;
+    if (files.length > 0) {
+        uploadFiles(files);
+    }
+}
+
+async function handleManualUpload() {
     const filename = document.getElementById('fileName').value.trim();
     const content = document.getElementById('fileContent').value;
     
@@ -383,22 +489,62 @@ async function handleFileUpload() {
         return;
     }
     
+    const encrypt = document.getElementById('encryptionEnabled').checked;
+    await uploadFile(filename, content, false, encrypt);
+}
+
+async function uploadFiles(files) {
+    const encrypt = document.getElementById('encryptionEnabled').checked;
     const progressContainer = document.getElementById('uploadProgress');
-    progressContainer.innerHTML = '<div class="progress-item loading"><div class="progress-label">Uploading...</div></div>';
+    
+    progressContainer.innerHTML = '<div class="progress-label loading">Preparing files...</div>';
+    
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        await uploadFile(file.name, file, true, encrypt);
+        
+        if (i < files.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+}
+
+async function uploadFile(filename, content, isFile, encrypt) {
+    const progressContainer = document.getElementById('uploadProgress');
+    progressContainer.innerHTML = `<div class="progress-label loading">Uploading ${filename}...</div>`;
     
     try {
+        let payload = {
+            filename: filename,
+            encrypt: encrypt
+        };
+        
+        if (isFile) {
+            // Read file as base64
+            const reader = new FileReader();
+            const fileContent = await new Promise((resolve, reject) => {
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(content);
+            });
+            payload.content_base64 = fileContent;
+        } else {
+            payload.content = content;
+        }
+        
         const response = await fetch(`${CLIENT_URL}/upload`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filename, content })
+            body: JSON.stringify(payload)
         });
         
         const data = await response.json();
         
         if (data.success) {
+            const encryptionStatus = data.encrypted ? ' (Encrypted 🔒)' : '';
             progressContainer.innerHTML = `
-                <div class="progress-item">
-                    <div class="progress-label">✓ Upload successful: ${data.filename} (${data.size} bytes)</div>
+                <div style="margin-bottom: 10px;">
+                    <div class="progress-label">✓ Upload successful: ${data.filename}${encryptionStatus}</div>
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: 100%"></div>
                     </div>
@@ -407,20 +553,22 @@ async function handleFileUpload() {
             
             document.getElementById('fileName').value = '';
             document.getElementById('fileContent').value = '';
+            document.getElementById('fileInput').value = '';
             
             setTimeout(() => {
-                loadUserDashboard();
+                refreshDashboard();
             }, 2000);
         } else {
-            progressContainer.innerHTML = '<div class="progress-item"><div class="progress-label">❌ Upload failed</div></div>';
+            progressContainer.innerHTML = '<div class="progress-label">✗ Upload failed</div>';
         }
     } catch (error) {
         console.error('Upload error:', error);
-        progressContainer.innerHTML = '<div class="progress-item"><div class="progress-label">❌ Connection error. Please ensure the client service is running.</div></div>';
+        progressContainer.innerHTML = '<div class="progress-label">✗ Connection error. Please ensure the client service is running.</div>';
     }
 }
 
-// User Management
+// ============ User Management ============
+
 async function handleAddUser(e) {
     e.preventDefault();
     
@@ -456,7 +604,6 @@ async function handleAddUser(e) {
     }
 }
 
-// Modal functions
 function showModal(modalId) {
     document.getElementById(modalId).classList.add('active');
 }
@@ -465,6 +612,5 @@ function hideModal(modalId) {
     document.getElementById(modalId).classList.remove('active');
 }
 
-// Make functions global for onclick handlers
 window.promoteUser = promoteUser;
 window.simulateFailure = simulateFailure;

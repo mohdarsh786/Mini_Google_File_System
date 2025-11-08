@@ -2,9 +2,11 @@ import json
 import os
 import time
 import threading
+import hashlib
+import secrets
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Configuration
 HEARTBEAT_TIMEOUT = 15  # seconds
@@ -13,20 +15,23 @@ CHUNK_SIZE = 1024 * 1024  # 1MB
 DATA_DIR = "/data/master"
 METADATA_FILE = f"{DATA_DIR}/chunks.json"
 USERS_FILE = f"{DATA_DIR}/users.json"
+SESSIONS_FILE = f"{DATA_DIR}/sessions.json"
 
 # Global state
 chunk_servers = {}
 metadata = {"files": {}, "chunks": {}}
 users = {}
+sessions = {}  # Store active sessions
 heartbeat_lock = threading.Lock()
 metadata_lock = threading.Lock()
+session_lock = threading.Lock()
 
 # Initialize data directory
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def load_data():
-    """Load metadata and users from disk"""
-    global metadata, users
+    """Load metadata, users, and sessions from disk"""
+    global metadata, users, sessions
     
     # Load metadata
     if os.path.exists(METADATA_FILE):
@@ -39,11 +44,20 @@ def load_data():
             users = json.load(f)
     else:
         users = {
-            "admin": {"password": "admin123", "role": "admin", "created_by": "system"},
-            "manager1": {"password": "manager123", "role": "manager", "created_by": "admin"},
-            "user1": {"password": "user123", "role": "user", "created_by": "manager1"}
+            "admin": {
+                "password": hashlib.sha256("admin123".encode()).hexdigest(),
+                "role": "admin",
+                "created_by": "system"
+            }
         }
         save_users()
+    
+    # Load sessions
+    if os.path.exists(SESSIONS_FILE):
+        with open(SESSIONS_FILE, 'r') as f:
+            sessions = json.load(f)
+        # Clean expired sessions
+        clean_expired_sessions()
 
 def save_metadata():
     """Save metadata to disk"""
@@ -55,6 +69,56 @@ def save_users():
     """Save users to disk"""
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f, indent=2)
+
+def save_sessions():
+    """Save sessions to disk"""
+    with session_lock:
+        with open(SESSIONS_FILE, 'w') as f:
+            json.dump(sessions, f, indent=2)
+
+def create_session(username, role):
+    """Create a new session token"""
+    token = secrets.token_urlsafe(32)
+    expiry = (datetime.now() + timedelta(hours=24)).isoformat()
+    
+    with session_lock:
+        sessions[token] = {
+            "username": username,
+            "role": role,
+            "expiry": expiry
+        }
+        save_sessions()
+    
+    return token
+
+def validate_session(token):
+    """Validate session token"""
+    with session_lock:
+        if token not in sessions:
+            return None
+        
+        session = sessions[token]
+        expiry = datetime.fromisoformat(session["expiry"])
+        
+        if datetime.now() > expiry:
+            del sessions[token]
+            save_sessions()
+            return None
+        
+        return session
+
+def clean_expired_sessions():
+    """Remove expired sessions"""
+    with session_lock:
+        now = datetime.now()
+        expired = [token for token, session in sessions.items()
+                  if datetime.fromisoformat(session["expiry"]) < now]
+        
+        for token in expired:
+            del sessions[token]
+        
+        if expired:
+            save_sessions()
 
 def register_chunk_server(server_id, host, port):
     """Register or update a chunk server"""
@@ -80,6 +144,9 @@ def check_heartbeats():
                         info["status"] = "failed"
                         print(f"[MASTER] Server {server_id} marked as FAILED")
                         threading.Thread(target=re_replicate_chunks, args=(server_id,), daemon=True).start()
+        
+        # Clean expired sessions periodically
+        clean_expired_sessions()
 
 def re_replicate_chunks(failed_server):
     """Re-replicate chunks from a failed server"""
@@ -114,7 +181,7 @@ class MasterHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         self.end_headers()
     
     def do_OPTIONS(self):
@@ -150,6 +217,10 @@ class MasterHandler(BaseHTTPRequestHandler):
             self._handle_heartbeat(data)
         elif path == "/login":
             self._handle_login(data)
+        elif path == "/logout":
+            self._handle_logout(data)
+        elif path == "/signup":
+            self._handle_signup(data)
         elif path == "/create_user":
             self._handle_create_user(data)
         elif path == "/promote_user":
@@ -208,20 +279,71 @@ class MasterHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Missing server_id"}).encode())
     
     def _handle_login(self, data):
-        """Authenticate user"""
+        """Authenticate user and create session"""
         username = data.get("username")
         password = data.get("password")
         
-        if username in users and users[username]["password"] == password:
+        if not username or not password:
+            self._set_headers(400)
+            self.wfile.write(json.dumps({"success": False, "error": "Missing credentials"}).encode())
+            return
+        
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        
+        if username in users and users[username]["password"] == password_hash:
+            token = create_session(username, users[username]["role"])
+            
             self._set_headers()
             self.wfile.write(json.dumps({
                 "success": True,
                 "role": users[username]["role"],
-                "username": username
+                "username": username,
+                "token": token
             }).encode())
         else:
             self._set_headers(401)
             self.wfile.write(json.dumps({"success": False, "error": "Invalid credentials"}).encode())
+    
+    def _handle_logout(self, data):
+        """Logout user and invalidate session"""
+        token = data.get("token")
+        
+        if token:
+            with session_lock:
+                if token in sessions:
+                    del sessions[token]
+                    save_sessions()
+        
+        self._set_headers()
+        self.wfile.write(json.dumps({"success": True}).encode())
+    
+    def _handle_signup(self, data):
+        """Public signup - creates basic user account"""
+        username = data.get("username")
+        password = data.get("password")
+        
+        if not username or not password:
+            self._set_headers(400)
+            self.wfile.write(json.dumps({"success": False, "error": "Missing credentials"}).encode())
+            return
+        
+        if username in users:
+            self._set_headers(400)
+            self.wfile.write(json.dumps({"success": False, "error": "Username already exists"}).encode())
+            return
+        
+        # Create new user with default role
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        users[username] = {
+            "password": password_hash,
+            "role": "user",
+            "created_by": "self",
+            "created_at": datetime.now().isoformat()
+        }
+        save_users()
+        
+        self._set_headers()
+        self.wfile.write(json.dumps({"success": True, "message": "Account created successfully"}).encode())
     
     def _handle_get_users(self):
         """Get all users (admin only)"""
@@ -235,7 +357,7 @@ class MasterHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({"users": user_list}).encode())
     
     def _handle_create_user(self, data):
-        """Create new user"""
+        """Create new user (admin/manager only)"""
         username = data.get("username")
         password = data.get("password")
         role = data.get("role", "user")
@@ -246,10 +368,12 @@ class MasterHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"success": False, "error": "User exists"}).encode())
             return
         
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
         users[username] = {
-            "password": password,
+            "password": password_hash,
             "role": role,
-            "created_by": created_by
+            "created_by": created_by,
+            "created_at": datetime.now().isoformat()
         }
         save_users()
         

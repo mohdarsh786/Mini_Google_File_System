@@ -1,11 +1,8 @@
-version: '3.8'
-
 services:
   # Master Node
   master:
     build: .
     container_name: gfs_master
-    command: python3 /app/backend/master_node.py
     ports:
       - "8000:8000"
     volumes:
@@ -13,86 +10,90 @@ services:
     networks:
       - gfs_network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/status')"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    command: python3 -u /app/backend/master_node.py
 
-  # Chunk Server 1
+  # Chunk Servers
   chunk_server_1:
     build: .
     container_name: gfs_chunk_1
-    command: python3 /app/backend/chunk_server.py
+    ports:
+      - "9001:9001"
+    volumes:
+      - chunk1_data:/data/chunks
+    networks:
+      - gfs_network
+    restart: unless-stopped
     environment:
       - SERVER_ID=chunk_server_1
       - SERVER_PORT=9001
-    volumes:
-      - chunk_data_1:/data/chunks
-    networks:
-      - gfs_network
     depends_on:
       - master
-    restart: unless-stopped
+    command: python3 -u /app/backend/chunk_server.py
 
-  # Chunk Server 2
   chunk_server_2:
     build: .
     container_name: gfs_chunk_2
-    command: python3 /app/backend/chunk_server.py
+    ports:
+      - "9002:9002"
+    volumes:
+      - chunk2_data:/data/chunks
+    networks:
+      - gfs_network
+    restart: unless-stopped
     environment:
       - SERVER_ID=chunk_server_2
       - SERVER_PORT=9002
-    volumes:
-      - chunk_data_2:/data/chunks
-    networks:
-      - gfs_network
     depends_on:
       - master
-    restart: unless-stopped
+    command: python3 -u /app/backend/chunk_server.py
 
-  # Chunk Server 3
   chunk_server_3:
     build: .
     container_name: gfs_chunk_3
-    command: python3 /app/backend/chunk_server.py
+    ports:
+      - "9003:9003"
+    volumes:
+      - chunk3_data:/data/chunks
+    networks:
+      - gfs_network
+    restart: unless-stopped
     environment:
       - SERVER_ID=chunk_server_3
       - SERVER_PORT=9003
-    volumes:
-      - chunk_data_3:/data/chunks
-    networks:
-      - gfs_network
     depends_on:
       - master
-    restart: unless-stopped
+    command: python3 -u /app/backend/chunk_server.py
 
-  # Client Node
+  # Client Service
   client:
     build: .
     container_name: gfs_client
-    command: python3 /app/backend/client_script.py
     ports:
       - "8001:8001"
     networks:
       - gfs_network
+    restart: unless-stopped
     depends_on:
       - master
       - chunk_server_1
       - chunk_server_2
       - chunk_server_3
-    restart: unless-stopped
+    command: python3 -u /app/backend/client_script.py
 
-  # Web Interface
+  # Web Interface (static)
   web:
-    build: .
+    image: nginx:alpine
     container_name: gfs_web
-    command: python3 -m http.server 80 --directory /app/web
     ports:
       - "8080:80"
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
     networks:
       - gfs_network
     restart: unless-stopped
+    depends_on:
+      - master
+      - client
 
 networks:
   gfs_network:
@@ -100,6 +101,6 @@ networks:
 
 volumes:
   master_data:
-  chunk_data_1:
-  chunk_data_2:
-  chunk_data_3:
+  chunk1_data:
+  chunk2_data:
+  chunk3_data:
