@@ -1,4 +1,3 @@
-// Configuration
 const MASTER_URL = 'http://localhost:8000';
 const CLIENT_URL = 'http://localhost:8001';
 const REFRESH_INTERVAL = 3000;
@@ -59,10 +58,8 @@ function setupEventListeners() {
     
     fileInput.addEventListener('change', handleFileSelect);
     
-    // Upload
     document.getElementById('uploadBtn').addEventListener('click', handleManualUpload);
     
-    // Modals
     const addUserBtn = document.getElementById('addUserBtn');
     if (addUserBtn) {
         addUserBtn.addEventListener('click', () => showModal('addUserModal'));
@@ -88,7 +85,6 @@ function switchAuthTab(tab) {
     document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
     document.getElementById(`${tab}Form`).classList.add('active');
     
-    // Clear messages
     document.getElementById('loginError').textContent = '';
     document.getElementById('signupError').textContent = '';
     document.getElementById('signupSuccess').textContent = '';
@@ -214,7 +210,6 @@ function showDashboard() {
     document.getElementById('userName').textContent = currentUser;
     document.getElementById('userRole').textContent = currentRole;
     
-    // Show appropriate dashboard
     document.querySelectorAll('.dashboard-content').forEach(el => el.classList.remove('active'));
     
     if (currentRole === 'admin') {
@@ -228,7 +223,6 @@ function showDashboard() {
         loadUserDashboard();
     }
     
-    // Start auto-refresh
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(refreshDashboard, REFRESH_INTERVAL);
 }
@@ -520,7 +514,6 @@ async function uploadFile(filename, content, isFile, encrypt) {
         };
         
         if (isFile) {
-            // Read file as base64
             const reader = new FileReader();
             const fileContent = await new Promise((resolve, reject) => {
                 reader.onload = () => resolve(reader.result.split(',')[1]);

@@ -1,0 +1,23 @@
+{
+  "admin": {
+    "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "role": "admin",
+    "created_by": "system"
+  },
+  "manager1": {
+    "password": "866485796cfa8d7c0cf7111640205b83076433547577511d81f8030ae99ecea5",
+    "role": "manager",
+    "created_by": "admin"
+  },
+  "user1": {
+    "password": "e606e38b0d8c19b24cf0ee3808183162ea7cd63ff7912dbb22b5e803286b4446",
+    "role": "user",
+    "created_by": "manager1"
+  },
+  "admin1": {
+    "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "role": "user",
+    "created_by": "self",
+    "created_at": "2025-11-08T17:29:35.920224"
+  }
+}
