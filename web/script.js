@@ -99,6 +99,7 @@ async function handleLogin(e) {
     console.log('Attempting login for:', username);
     
     try {
+        console.log('Sending login request to:', `${MASTER_URL}/login`);
         const response = await fetch(`${MASTER_URL}/login`, {
             method: 'POST',
             headers: { 
@@ -112,7 +113,11 @@ async function handleLogin(e) {
         console.log('Response status:', response.status);
         console.log('Response ok:', response.ok);
         
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+        
         const data = await response.json();
+        console.log('Response data:', data);
         console.log('Response data:', data);
         
         if (data.success) {
@@ -125,6 +130,7 @@ async function handleLogin(e) {
             sessionStorage.setItem('gfs_user', username);
             sessionStorage.setItem('gfs_role', data.role);
             
+            console.log('Calling showDashboard...');
             showDashboard();
         } else {
             console.log('Login failed:', data.error);
@@ -132,6 +138,7 @@ async function handleLogin(e) {
             console.error('Login failed:', data.error);
         }
     } catch (error) {
+        console.error('Login error (exception):', error);
         errorEl.textContent = 'Connection error. Please ensure the system is running.';
         console.error('Login error:', error);
     }
